@@ -34,11 +34,13 @@ class PizzaState:
 def create_initial_state(pizzas: List[Pizza], rejected: Optional[List[str]] = None, ambiguous: Optional[List[Tuple[int, str]]] = None, errors: Optional[List[str]] = None) -> PizzaState:
     pizzas_with_cheese = []
     for pizza in pizzas:
+        # Only toppings is defaulted; crust and size remain None if not specified
         toppings = pizza.get('toppings')
         if toppings is None:
             pizza['toppings'] = ['cheese']
         elif 'cheese' not in toppings:
             pizza['toppings'] = toppings + ['cheese']
+        # Do NOT default crust or size; leave as None if not present
         pizzas_with_cheese.append(pizza)
     if rejected is None:
         rejected = []

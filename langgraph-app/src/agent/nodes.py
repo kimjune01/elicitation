@@ -1,8 +1,8 @@
 import os
 import google.generativeai as genai
 from pydantic import BaseModel
-from agent.prompts import PIZZA_EXTRACTION_PROMPT
-from agent.state import Pizza, PizzaState, create_initial_state
+from src.agent.prompts import PIZZA_EXTRACTION_PROMPT, ORDER_SUMMARY_PROMPT
+from src.agent.state import Pizza, PizzaState, create_initial_state
 from typing import List, Tuple, TypedDict
 import json
 
@@ -121,7 +121,7 @@ def extract_pizzas_node(state: PizzaState, llm) -> PizzaState:
             "response_mime_type": "application/json",
             "response_schema": PizzaExtractionResult,
         })
-        print("response:", response)
+        print("PizzaExtractionResult response:", response)
         pizzas, rejected, ambiguous, parse_errors = parse_llm_pizza_response(response)
         errors.extend(parse_errors)
     except Exception as e:
@@ -129,7 +129,6 @@ def extract_pizzas_node(state: PizzaState, llm) -> PizzaState:
         errors.append(f"LLM call failed: {str(e)}")
     new_state = create_initial_state(pizzas, rejected=rejected, ambiguous=ambiguous, errors=errors)
     new_state.conversation = state.conversation
-    print("NEW STATE:", new_state)
     return new_state
 
 def inspect_state_node(state):
@@ -139,5 +138,89 @@ def inspect_state_node(state):
         for error in state.errors:
             if error.startswith("Raw response:"):
                 print("RAW LLM OUTPUT:", error[len("Raw response:"):].strip())
+    return state
+
+def compute_pizza_completeness(state: PizzaState):
+    """
+    Returns (complete_pizzas, incomplete_pizzas) from the pizzas array and ambiguous list.
+    complete_pizzas: list of (idx, pizza) tuples
+    incomplete_pizzas: list of dicts with index, pizza, missing_fields, ambiguous_fields
+    """
+    complete_pizzas = []
+    incomplete_pizzas = []
+    for idx, pizza in enumerate(state.pizzas):
+        missing_fields = []
+        for field in ['crust', 'toppings', 'size']:
+            if not pizza.get(field):
+                missing_fields.append(field)
+        ambiguous_fields = [amb[1] for amb in state.ambiguous if amb[0] == idx]
+        if not missing_fields and not ambiguous_fields:
+            complete_pizzas.append((idx, pizza))
+        else:
+            incomplete_pizzas.append({
+                'index': ordinal(idx+1),
+                'pizza': pizza,
+                'accepted_fields': [field for field in ['crust', 'toppings', 'size'] if pizza.get(field)],
+                'missing_fields': missing_fields,
+                'ambiguous_fields': ambiguous_fields
+            })
+    return complete_pizzas, incomplete_pizzas
+
+def ordinal(n):
+    # Returns 'first', 'second', ... for 1-based n
+    ordinals = [
+        'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth',
+        'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth', 'eighteenth', 'nineteenth', 'twentieth'
+    ]
+    if 1 <= n <= len(ordinals):
+        return ordinals[n-1]
+    return f"{n}th"
+
+def elicitation_response_node(state: PizzaState) -> PizzaState:
+    """
+    Node to generate a response asking for missing or ambiguous pizza properties using ORDER_SUMMARY_PROMPT.
+    """
+    complete_pizzas, incomplete_pizzas = compute_pizza_completeness(state)
+    accepted = complete_pizzas
+    rejected = state.rejected
+    ambiguous = state.ambiguous
+    missing = []
+    for inc in incomplete_pizzas:
+        missing.extend(inc['missing_fields'])
+        accepted.extend(inc['accepted_fields'])
+    # Format for prompt
+    accepted_str = str(accepted)
+    rejected_str = str(rejected)
+    ambiguous_str = str(ambiguous)
+    missing_str = str(missing)
+    complete_pizzas_str = str(complete_pizzas)
+    print("COMPLETE PIZZAS:", complete_pizzas_str)
+    prompt = ORDER_SUMMARY_PROMPT.format(
+        accepted=accepted_str,
+        rejected=rejected_str,
+        ambiguous=ambiguous_str,
+        missing=missing_str,
+        complete_pizzas=complete_pizzas_str
+    )
+    response = gemini_llm(prompt)
+    print("ELICITATION RESPONSE:", response)
+    state.conversation.append({"role": "receiver", "content": response})
+    return state
+
+def order_confirmation_node(state: PizzaState) -> PizzaState:
+    """
+    Node to confirm the order is complete and ready for processing.
+    """
+    complete_pizzas, incomplete_pizzas = compute_pizza_completeness(state)
+    assert not incomplete_pizzas, "order_confirmation_node called with incomplete pizzas!"
+    # Format the complete pizzas for the confirmation message
+    pizza_descriptions = []
+    for idx, pizza in complete_pizzas:
+        pizza_num = ordinal(idx+1)
+        desc = f"Your {pizza_num} pizza: {pizza.get('size', '?')} {pizza.get('crust', '?')} crust with {', '.join(pizza.get('toppings', []))}"
+        pizza_descriptions.append(desc)
+    pizzas_str = '\n'.join(pizza_descriptions)
+    confirmation_message = f"Your pizza order is complete and has been confirmed!\n\nOrder summary:\n{pizzas_str}\n\nThank you."
+    state.questions.append(confirmation_message)
     return state
 

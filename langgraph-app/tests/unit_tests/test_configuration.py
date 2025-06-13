@@ -1,9 +1,10 @@
-from langgraph.pregel import Pregel
+from langgraph.graph import StateGraph
 
-from agent.graph import graph
+from src.agent.graph import graph
 
 
 def test_placeholder() -> None:
     # TODO: You can add actual unit tests
     # for your graph and other logic here.
-    assert isinstance(graph, Pregel)
+    assert isinstance(graph, StateGraph)
+
