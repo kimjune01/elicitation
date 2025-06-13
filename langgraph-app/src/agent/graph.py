@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
 from src.agent.state import PizzaState
-from src.agent.nodes import extract_pizzas_node, gemini_llm, inspect_state_node, elicitation_response_node, order_confirmation_node, compute_pizza_completeness, human_node
+from src.agent.nodes import extract_pizzas_node, inspect_state_node, elicitation_response_node, order_confirmation_node, compute_pizza_completeness, human_node
 from typing import Dict, Any
 
 GENERATE_PIZZAS = "extract_pizzas"

@@ -1,13 +1,15 @@
-# Pizza Order Extraction Agent
+# Pizza Order Elicitation Agent
 
-A LangGraph application that extracts pizza orders from natural language conversations using Google's Gemini AI.
+A LangGraph application that facilitates pizza order elicitation through natural language conversations using Google's Gemini AI.
 
 ## Description
 
-This agent processes conversational text between callers and receivers to extract structured pizza orders. It identifies:
-- Complete pizza orders (crust, toppings, size)
-- Rejected requests that aren't pizza orders
-- Ambiguous requests that need clarification
+This conversational agent actively elicits pizza orders from customers by:
+- Extracting structured pizza information (crust, toppings, size) from natural language
+- Practicing active listening by acknowledging what customers have specified
+- Identifying and rejecting non-pizza requests
+- Clarifying ambiguous or incomplete orders through targeted questions
+- Guiding customers to complete their pizza orders with all necessary details
 
 ## Setup
 

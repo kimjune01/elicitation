@@ -145,6 +145,7 @@ def extract_pizzas_node(state: PizzaState) -> PizzaState:
             "response_mime_type": "application/json",
             "response_schema": PizzaExtractionResult,
         })
+        print("PizzaExtractionResult response:", response)
         pizzas, rejected, ambiguous, parse_errors = parse_llm_pizza_response(response)
         errors.extend(parse_errors)
     except Exception as e:
@@ -239,7 +240,9 @@ def elicitation_response_node(state: PizzaState) -> PizzaState:
         missing=missing_str,
         complete_pizzas=complete_pizzas_str
     )
+    print("ELICITATION PROMPT:", prompt)
     response = gemini_llm(prompt)
+    print("ELICITATION RESPONSE:", response)
     state.messages.append(AIMessage(content=response))
     return state
 

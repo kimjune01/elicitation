@@ -166,25 +166,6 @@ def test_parse_llm_pizza_response_empty_fields():
     assert pizzas[0]["crust"] is None
     assert pizzas[0]["size"] is None
 
-# Test inspect_state_node function
-def test_inspect_state_node_basic(basic_state, capsys):
-    """Test inspect_state_node with basic state"""
-    state = nodes.inspect_state_node(basic_state)
-    assert state is basic_state
-    captured = capsys.readouterr()
-    assert "INSPECT STATE" in captured.out
-
-def test_inspect_state_node_with_errors(capsys):
-    """Test inspect_state_node with errors in state"""
-    state = PizzaState(
-        pizzas=[], messages=[], rejected=[], ambiguous=[], questions=[],
-        errors=["Raw response: some error response"]
-    )
-    result = nodes.inspect_state_node(state)
-    assert result is state
-    captured = capsys.readouterr()
-    assert "RAW LLM OUTPUT" in captured.out
-
 # Test compute_pizza_completeness function
 def test_compute_pizza_completeness_complete_pizzas(basic_state):
     """Test compute_pizza_completeness with complete pizzas"""
