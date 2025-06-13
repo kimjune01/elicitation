@@ -3,7 +3,7 @@ import google.generativeai as genai
 from pydantic import BaseModel
 from src.agent.prompts import PIZZA_EXTRACTION_PROMPT, ORDER_SUMMARY_PROMPT
 from src.agent.state import Pizza, PizzaState, create_initial_state
-from typing import List, Tuple, TypedDict
+from typing import List, Tuple, TypedDict, Dict
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 import json
 from langgraph.types import interrupt
@@ -27,14 +27,14 @@ def gemini_llm(prompt_text, config={}):
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash-preview-05-20",
             contents=prompt_text,
             config=config,
         )
         return response.text.strip()
     except Exception as e:
         print(f"[gemini_llm] Structured output failed: {e}. Trying plain text fallback.")
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
         response = model.generate_content(prompt_text)
         return response.text.strip()
 
@@ -134,7 +134,7 @@ def parse_llm_pizza_response(response: str) -> tuple:
         errors.append(f"Raw response: {response}")
     return pizzas, rejected, ambiguous, errors
 
-def extract_pizzas_node(state: PizzaState, llm) -> PizzaState:
+def extract_pizzas_node(state: PizzaState) -> PizzaState:
     """
     Node to extract pizzas from the messages using the provided LLM.
     """
@@ -145,7 +145,6 @@ def extract_pizzas_node(state: PizzaState, llm) -> PizzaState:
             "response_mime_type": "application/json",
             "response_schema": PizzaExtractionResult,
         })
-        print("PizzaExtractionResult response:", response)
         pizzas, rejected, ambiguous, parse_errors = parse_llm_pizza_response(response)
         errors.extend(parse_errors)
     except Exception as e:
@@ -187,7 +186,7 @@ def compute_pizza_completeness(state: PizzaState):
             incomplete_pizzas.append({
                 'index': ordinal(idx+1),
                 'pizza': pizza,
-                'accepted_fields': [field for field in ['crust', 'toppings', 'size'] if getattr(pizza, field)],
+                'accepted_fields': {field: getattr(pizza, field) for field in ['crust', 'toppings', 'size'] if getattr(pizza, field)},
                 'missing_fields': missing_fields,
                 'ambiguous_fields': ambiguous_fields
             })
@@ -203,18 +202,30 @@ def ordinal(n):
         return ordinals[n-1]
     return f"{n}th"
 
+def make_accepted_fields(incomplete_pizzas: List[Dict]) -> List[Dict]:
+    """
+    For each incomplete pizza, return a dict of accepted fields and their values,
+    constructed from the pizza object.
+    """
+    accepted = []
+    for inc in incomplete_pizzas:
+        pizza = inc.get('pizza')
+        if pizza:
+            accepted_fields = {field: getattr(pizza, field) for field in ['crust', 'toppings', 'size'] if getattr(pizza, field)}
+            accepted.append(accepted_fields)
+    return accepted
+
 def elicitation_response_node(state: PizzaState) -> PizzaState:
     """
     Node to generate a response asking for missing or ambiguous pizza properties using ORDER_SUMMARY_PROMPT.
     """
     complete_pizzas, incomplete_pizzas = compute_pizza_completeness(state)
-    accepted = complete_pizzas
+    accepted = make_accepted_fields(incomplete_pizzas)
     rejected = state.rejected
     ambiguous = state.ambiguous
-    missing = []
+    missing: List[str] = []
     for inc in incomplete_pizzas:
         missing.extend(inc['missing_fields'])
-        accepted.extend(inc['accepted_fields'])
     # Format for prompt
     accepted_str = str(accepted)
     rejected_str = str(rejected)
@@ -229,7 +240,6 @@ def elicitation_response_node(state: PizzaState) -> PizzaState:
         complete_pizzas=complete_pizzas_str
     )
     response = gemini_llm(prompt)
-    print("ELICITATION RESPONSE:", response)
     state.messages.append(AIMessage(content=response))
     return state
 
@@ -252,9 +262,7 @@ def order_confirmation_node(state: PizzaState) -> PizzaState:
 
 def human_node(state: PizzaState) -> PizzaState:
     """
-    Node that interrupts the graph to wait for user input.
+    Node that represents a user input loop. No interrupt, just returns state.
     """
-    user_input = interrupt({})
-    state.messages.append(HumanMessage(content=user_input))
     return state
 
