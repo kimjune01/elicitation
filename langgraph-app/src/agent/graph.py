@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
 from src.agent.state import PizzaState
-from src.agent.nodes import extract_pizzas_node, gemini_llm, inspect_state_node, elicitation_response_node, order_confirmation_node, compute_pizza_completeness
+from src.agent.nodes import extract_pizzas_node, gemini_llm, inspect_state_node, elicitation_response_node, order_confirmation_node, compute_pizza_completeness, human_node
 from typing import List, Dict, Any
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -9,6 +9,7 @@ INSPECT_STATE = "inspect_state"
 CHAT_INPUT = "chat_input"
 ELICITATION_RESPONSE = "elicitation_response"
 ORDER_CONFIRMATION = "order_confirmation"
+HUMAN_NODE = "human_node"
 
 def chat_input_node(inputs: Dict[str, Any]) -> PizzaState:
     # If already a PizzaState, just return it
@@ -25,6 +26,7 @@ graph.add_node(GENERATE_PIZZAS, lambda state: extract_pizzas_node(state, gemini_
 graph.add_node(INSPECT_STATE, inspect_state_node)
 graph.add_node(ELICITATION_RESPONSE, elicitation_response_node)
 graph.add_node(ORDER_CONFIRMATION, order_confirmation_node)
+graph.add_node(HUMAN_NODE, human_node)
 
 graph.add_edge(CHAT_INPUT, GENERATE_PIZZAS)
 
@@ -43,8 +45,10 @@ graph.add_conditional_edges(
         ORDER_CONFIRMATION: ORDER_CONFIRMATION,
     }
 )
-graph.add_edge(ELICITATION_RESPONSE, INSPECT_STATE)
 graph.add_edge(ORDER_CONFIRMATION, INSPECT_STATE)
+
+graph.add_edge(ELICITATION_RESPONSE, HUMAN_NODE)
+graph.add_edge(HUMAN_NODE, CHAT_INPUT)
 
 graph.add_edge(INSPECT_STATE, END)
 graph.set_entry_point(CHAT_INPUT)

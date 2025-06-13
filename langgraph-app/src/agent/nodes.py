@@ -6,6 +6,7 @@ from src.agent.state import Pizza, PizzaState, create_initial_state
 from typing import List, Tuple, TypedDict
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 import json
+from langgraph.types import interrupt
 
 # Define Pydantic models for structured output
 class PizzaModel(BaseModel):
@@ -117,6 +118,14 @@ def parse_llm_pizza_response(response: str) -> tuple:
             pizzas = normalized.get('pizzas', [])
             rejected = normalized.get('rejected', [])
             ambiguous = normalized.get('ambiguous', [])
+            # Convert empty string fields to None for Pydantic compatibility
+            for pizza in pizzas:
+                if 'crust' in pizza and pizza['crust'] == '':
+                    pizza['crust'] = None
+                if 'size' in pizza and pizza['size'] == '':
+                    pizza['size'] = None
+                if 'toppings' in pizza and pizza['toppings'] == '':
+                    pizza['toppings'] = None
         else:
             errors.append(f"LLM response JSON is not an object: {type(result).__name__}")
             errors.append(f"Raw response: {response}")
@@ -212,7 +221,6 @@ def elicitation_response_node(state: PizzaState) -> PizzaState:
     ambiguous_str = str(ambiguous)
     missing_str = str(missing)
     complete_pizzas_str = str(complete_pizzas)
-    print("COMPLETE PIZZAS:", complete_pizzas_str)
     prompt = ORDER_SUMMARY_PROMPT.format(
         accepted=accepted_str,
         rejected=rejected_str,
@@ -238,7 +246,15 @@ def order_confirmation_node(state: PizzaState) -> PizzaState:
         desc = f"Your {pizza_num} pizza: {pizza.size or '?'} {pizza.crust or '?'} crust with {', '.join(pizza.toppings or [])}"
         pizza_descriptions.append(desc)
     pizzas_str = '\n'.join(pizza_descriptions)
-    confirmation_message = f"Your pizza order is complete and has been confirmed!\n\nOrder summary:\n{pizzas_str}\n\nThank you."
-    state.questions.append(confirmation_message)
+    confirmation_message = f"Your pizza order is complete!\n\nOrder summary:\n{pizzas_str}\n\nThank you."
+    state.messages.append(AIMessage(content=confirmation_message))
+    return state
+
+def human_node(state: PizzaState) -> PizzaState:
+    """
+    Node that interrupts the graph to wait for user input.
+    """
+    user_input = interrupt({})
+    state.messages.append(HumanMessage(content=user_input))
     return state
 
