@@ -1,6 +1,5 @@
-from typing import TypedDict, Optional, List, Literal, Any, Tuple
-from dataclasses import dataclass, field
-from typing import Dict
+from typing import Optional, List, Literal, Tuple, Dict
+from pydantic import BaseModel, Field
 
 PizzaCrust = Literal['thin', 'classic', 'stuffed']
 PizzaSize = Literal['small', 'medium', 'large', 'extra_large']
@@ -13,45 +12,41 @@ PizzaTopping = Literal[
     'prosciutto', 'basil', 'sun-dried tomatoes', 'roasted red peppers', 'arugula'
 ]
 
-class Pizza(TypedDict, total=False):
-    crust: Optional[PizzaCrust]
-    toppings: Optional[List[PizzaTopping]]
-    size: Optional[PizzaSize]
+class Pizza(BaseModel):
+    crust: Optional[PizzaCrust] = None
+    toppings: Optional[List[PizzaTopping]] = None
+    size: Optional[PizzaSize] = None
 
-class Message(TypedDict):
-    role: Literal['caller', 'receiver']
-    content: str
-
-@dataclass
-class PizzaState:
-    pizzas: List[Pizza] = field(default_factory=list)
-    conversation: List[Message] = field(default_factory=list)
-    rejected: List[str] = field(default_factory=list)
-    ambiguous: List[Tuple[int, str]] = field(default_factory=list)
-    questions: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+class PizzaState(BaseModel):
+    pizzas: List[Pizza] = Field(default_factory=list)
+    messages: List[Dict[str, str]] = Field(default_factory=list)
+    rejected: List[str] = Field(default_factory=list)
+    ambiguous: List[Tuple[int, str]] = Field(default_factory=list)
+    questions: List[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
 
 def create_initial_state(pizzas: List[Pizza], rejected: Optional[List[str]] = None, ambiguous: Optional[List[Tuple[int, str]]] = None, errors: Optional[List[str]] = None) -> PizzaState:
     pizzas_with_cheese = []
     for pizza in pizzas:
         # Only toppings is defaulted; crust and size remain None if not specified
-        toppings = pizza.get('toppings')
+        if isinstance(pizza, dict):
+            pizza_obj = Pizza(**pizza)
+        else:
+            pizza_obj = pizza
+            
+        toppings = pizza_obj.toppings
         if toppings is None:
-            pizza['toppings'] = ['cheese']
+            pizza_obj.toppings = ['cheese']
         elif 'cheese' not in toppings:
-            pizza['toppings'] = toppings + ['cheese']
+            pizza_obj.toppings = toppings + ['cheese']
         # Do NOT default crust or size; leave as None if not present
-        pizzas_with_cheese.append(pizza)
-    if rejected is None:
-        rejected = []
-    if ambiguous is None:
-        ambiguous = []
-    if errors is None:
-        errors = []
+        pizzas_with_cheese.append(pizza_obj)
+    
     return PizzaState(
         pizzas=pizzas_with_cheese,
-        conversation=[],
-        rejected=rejected,
-        ambiguous=ambiguous,
-        errors=errors
+        messages=[],
+        rejected=rejected or [],
+        ambiguous=ambiguous or [],
+        questions=[],
+        errors=errors or []
     )

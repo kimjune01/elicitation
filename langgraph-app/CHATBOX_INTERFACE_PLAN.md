@@ -1,22 +1,24 @@
 # Pizza Ordering Chatbot Web Interface Plan
 
 ## Overview
+
 This plan outlines the steps to create a web-based chat interface for the pizza ordering LangGraph agent, accessible via localhost.
 
 ## Architecture
 
 ### Technology Stack
+
 - **Backend**: FastAPI (Python)
   - Async support for handling multiple chat sessions
   - WebSocket support for real-time communication
   - Easy integration with existing LangGraph code
-  
 - **Frontend**: Vanilla HTML/CSS/JavaScript
   - Simple and lightweight
   - No build process required
   - WebSocket client for real-time chat
 
 ### System Architecture
+
 ```
 ┌─────────────────┐     WebSocket      ┌──────────────────┐
 │                 │◄──────────────────►│                  │
@@ -37,6 +39,7 @@ This plan outlines the steps to create a web-based chat interface for the pizza 
 ### Phase 1: Backend Setup with Abstraction Layer
 
 #### 1. Create FastAPI Server Structure with Clean Architecture
+
 ```
 src/
 ├── web/
@@ -57,6 +60,7 @@ src/
 ```
 
 #### 2. FastAPI Application (`app.py`)
+
 ```python
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
@@ -80,23 +84,24 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 ```
 
 #### 3. Agent Abstraction Layer (`agents/base.py`)
+
 ```python
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 
 class ChatAgent(ABC):
     """Abstract base class for chat agents"""
-    
+
     @abstractmethod
     async def process_message(self, message: str, session_id: str) -> str:
         """Process a user message and return agent response"""
         pass
-    
+
     @abstractmethod
     async def reset_session(self, session_id: str) -> None:
         """Reset the conversation for a session"""
         pass
-    
+
     @abstractmethod
     async def get_session_state(self, session_id: str) -> Dict[str, Any]:
         """Get current state of a session"""
@@ -104,6 +109,7 @@ class ChatAgent(ABC):
 ```
 
 #### 4. Pizza Agent Implementation (`agents/pizza_agent.py`)
+
 ```python
 from typing import Dict, Any
 from .base import ChatAgent
@@ -113,54 +119,55 @@ from src.agent.state import PizzaState
 class PizzaAgent(ChatAgent):
     def __init__(self):
         self.sessions: Dict[str, PizzaState] = {}
-    
+
     async def process_message(self, message: str, session_id: str) -> str:
         # Get or create session state
         if session_id not in self.sessions:
             self.sessions[session_id] = PizzaState()
-        
+
         state = self.sessions[session_id]
-        
-        # Add user message to conversation
-        state.conversation.append({
+
+        # Add user message to messages
+        state.messages.append({
             "role": "caller",
             "content": message
         })
-        
+
         # Run the graph
         result = await graph.ainvoke(state)
-        
+
         # Update session state
         self.sessions[session_id] = result
-        
+
         # Extract bot response
-        if result.conversation:
-            return result.conversation[-1]["content"]
+        if result.messages:
+            return result.messages[-1]["content"]
         return "I'm sorry, I couldn't process that request."
-    
+
     async def reset_session(self, session_id: str) -> None:
         if session_id in self.sessions:
             del self.sessions[session_id]
-    
+
     async def get_session_state(self, session_id: str) -> Dict[str, Any]:
         if session_id in self.sessions:
             state = self.sessions[session_id]
             return {
                 "pizzas": state.pizzas,
-                "conversation_length": len(state.conversation),
+                "messages_length": len(state.messages),
                 "has_errors": len(state.errors) > 0
             }
         return {}
 ```
 
 #### 5. Mock Agent for Testing (`agents/mock_agent.py`)
+
 ```python
 from typing import Dict, List
 from .base import ChatAgent
 
 class MockAgent(ChatAgent):
     """Mock agent for testing the web interface independently"""
-    
+
     def __init__(self):
         self.sessions: Dict[str, List[Dict]] = {}
         self.responses = [
@@ -170,18 +177,18 @@ class MockAgent(ChatAgent):
             "Your order is complete! You've ordered a {size} {crust} crust pizza.",
             "Is there anything else you'd like to add?"
         ]
-    
+
     async def process_message(self, message: str, session_id: str) -> str:
         if session_id not in self.sessions:
             self.sessions[session_id] = []
-        
+
         conversation = self.sessions[session_id]
         conversation.append({"role": "user", "content": message})
-        
+
         # Simple response logic
         response_index = min(len(conversation) - 1, len(self.responses) - 1)
         response = self.responses[response_index]
-        
+
         # Extract size and crust from conversation for final message
         if response_index == 3:
             size = "medium"
@@ -196,22 +203,23 @@ class MockAgent(ChatAgent):
                 elif "stuffed" in msg["content"].lower():
                     crust = "stuffed"
             response = response.format(size=size, crust=crust)
-        
+
         conversation.append({"role": "bot", "content": response})
         return response
-    
+
     async def reset_session(self, session_id: str) -> None:
         if session_id in self.sessions:
             del self.sessions[session_id]
-    
+
     async def get_session_state(self, session_id: str) -> Dict[str, Any]:
         return {
-            "conversation_length": len(self.sessions.get(session_id, [])),
+            "messages_length": len(self.sessions.get(session_id, [])),
             "is_mock": True
         }
 ```
 
 #### 6. Configuration Management (`config.py`)
+
 ```python
 import os
 from enum import Enum
@@ -223,15 +231,15 @@ class AgentType(Enum):
 class Config:
     # Agent configuration
     AGENT_TYPE = AgentType(os.getenv("AGENT_TYPE", "pizza"))
-    
+
     # Server configuration
     HOST = os.getenv("HOST", "0.0.0.0")
     PORT = int(os.getenv("PORT", "8000"))
-    
+
     # Development settings
     DEBUG = os.getenv("DEBUG", "false").lower() == "true"
     RELOAD = os.getenv("RELOAD", "true").lower() == "true"
-    
+
     # API Keys (for real agent)
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
@@ -239,6 +247,7 @@ config = Config()
 ```
 
 #### 7. WebSocket Handler with Dependency Injection (`websocket.py`)
+
 ```python
 from typing import Dict
 from fastapi import WebSocket, WebSocketDisconnect
@@ -255,7 +264,7 @@ class ChatManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.agent = self._create_agent()
-    
+
     def _create_agent(self) -> ChatAgent:
         """Factory method to create the appropriate agent"""
         if config.AGENT_TYPE == AgentType.MOCK:
@@ -266,15 +275,15 @@ class ChatManager:
             return PizzaAgent()
         else:
             raise ValueError(f"Unknown agent type: {config.AGENT_TYPE}")
-    
+
     async def connect(self, websocket: WebSocket, client_id: str):
         await websocket.accept()
         self.active_connections[client_id] = websocket
-        
+
     def disconnect(self, client_id: str):
         if client_id in self.active_connections:
             del self.active_connections[client_id]
-    
+
     async def handle_message(self, client_id: str, message: str):
         try:
             response = await self.agent.process_message(message, client_id)
@@ -282,14 +291,14 @@ class ChatManager:
         except Exception as e:
             logger.error(f"Error processing message: {e}")
             await self.send_error(client_id, "Sorry, I encountered an error.")
-    
+
     async def send_message(self, client_id: str, message: str):
         if client_id in self.active_connections:
             await self.active_connections[client_id].send_json({
                 "type": "message",
                 "message": message
             })
-    
+
     async def send_error(self, client_id: str, error: str):
         if client_id in self.active_connections:
             await self.active_connections[client_id].send_json({
@@ -304,185 +313,191 @@ chat_manager = ChatManager()
 ### Phase 2: Frontend Implementation
 
 #### 1. HTML Structure (`index.html`)
+
 ```html
 <!DOCTYPE html>
 <html>
-<head>
+  <head>
     <title>Pizza Order Bot</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
     <div class="chat-container">
-        <div class="chat-header">
-            <h2>🍕 Pizza Order Assistant</h2>
-        </div>
-        <div class="chat-messages" id="messages">
-            <!-- Messages will be inserted here -->
-        </div>
-        <div class="chat-input">
-            <input type="text" id="messageInput" placeholder="Type your order...">
-            <button id="sendButton">Send</button>
-        </div>
+      <div class="chat-header">
+        <h2>🍕 Pizza Order Assistant</h2>
+      </div>
+      <div class="chat-messages" id="messages">
+        <!-- Messages will be inserted here -->
+      </div>
+      <div class="chat-input">
+        <input type="text" id="messageInput" placeholder="Type your order..." />
+        <button id="sendButton">Send</button>
+      </div>
     </div>
     <script src="/static/script.js"></script>
-</body>
+  </body>
 </html>
 ```
 
 #### 2. CSS Styling (`style.css`)
+
 ```css
 .chat-container {
-    max-width: 600px;
-    margin: 50px auto;
-    border: 1px solid #ddd;
-    border-radius: 10px;
-    overflow: hidden;
+  max-width: 600px;
+  margin: 50px auto;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .chat-header {
-    background-color: #ff6b6b;
-    color: white;
-    padding: 15px;
-    text-align: center;
+  background-color: #ff6b6b;
+  color: white;
+  padding: 15px;
+  text-align: center;
 }
 
 .chat-messages {
-    height: 400px;
-    overflow-y: auto;
-    padding: 20px;
-    background-color: #f9f9f9;
+  height: 400px;
+  overflow-y: auto;
+  padding: 20px;
+  background-color: #f9f9f9;
 }
 
 .message {
-    margin-bottom: 15px;
-    padding: 10px;
-    border-radius: 5px;
+  margin-bottom: 15px;
+  padding: 10px;
+  border-radius: 5px;
 }
 
 .user-message {
-    background-color: #e3f2fd;
-    text-align: right;
+  background-color: #e3f2fd;
+  text-align: right;
 }
 
 .bot-message {
-    background-color: #f5f5f5;
-    text-align: left;
+  background-color: #f5f5f5;
+  text-align: left;
 }
 
 .chat-input {
-    display: flex;
-    padding: 15px;
-    background-color: white;
-    border-top: 1px solid #ddd;
+  display: flex;
+  padding: 15px;
+  background-color: white;
+  border-top: 1px solid #ddd;
 }
 
 #messageInput {
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    margin-right: 10px;
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  margin-right: 10px;
 }
 
 #sendButton {
-    padding: 10px 20px;
-    background-color: #ff6b6b;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
+  padding: 10px 20px;
+  background-color: #ff6b6b;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
 }
 ```
 
 #### 3. JavaScript Client (`script.js`)
+
 ```javascript
 class ChatClient {
-    constructor() {
-        this.clientId = this.generateClientId();
-        this.ws = null;
-        this.connectWebSocket();
-        this.setupEventListeners();
+  constructor() {
+    this.clientId = this.generateClientId();
+    this.ws = null;
+    this.connectWebSocket();
+    this.setupEventListeners();
+  }
+
+  generateClientId() {
+    return "client_" + Math.random().toString(36).substr(2, 9);
+  }
+
+  connectWebSocket() {
+    this.ws = new WebSocket(`ws://localhost:8000/ws/${this.clientId}`);
+
+    this.ws.onopen = () => {
+      console.log("Connected to chat server");
+      this.addMessage("bot", "Welcome to Pizza Bot! How can I help you today?");
+    };
+
+    this.ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      this.addMessage("bot", data.message);
+    };
+
+    this.ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      this.addMessage("bot", "Connection error. Please refresh the page.");
+    };
+  }
+
+  sendMessage(message) {
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ message }));
+      this.addMessage("user", message);
     }
+  }
 
-    generateClientId() {
-        return 'client_' + Math.random().toString(36).substr(2, 9);
-    }
+  addMessage(type, content) {
+    const messagesDiv = document.getElementById("messages");
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `message ${type}-message`;
+    messageDiv.textContent = content;
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }
 
-    connectWebSocket() {
-        this.ws = new WebSocket(`ws://localhost:8000/ws/${this.clientId}`);
-        
-        this.ws.onopen = () => {
-            console.log('Connected to chat server');
-            this.addMessage('bot', 'Welcome to Pizza Bot! How can I help you today?');
-        };
+  setupEventListeners() {
+    const input = document.getElementById("messageInput");
+    const button = document.getElementById("sendButton");
 
-        this.ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            this.addMessage('bot', data.message);
-        };
+    button.onclick = () => {
+      const message = input.value.trim();
+      if (message) {
+        this.sendMessage(message);
+        input.value = "";
+      }
+    };
 
-        this.ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            this.addMessage('bot', 'Connection error. Please refresh the page.');
-        };
-    }
-
-    sendMessage(message) {
-        if (this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ message }));
-            this.addMessage('user', message);
-        }
-    }
-
-    addMessage(type, content) {
-        const messagesDiv = document.getElementById('messages');
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}-message`;
-        messageDiv.textContent = content;
-        messagesDiv.appendChild(messageDiv);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
-
-    setupEventListeners() {
-        const input = document.getElementById('messageInput');
-        const button = document.getElementById('sendButton');
-
-        button.onclick = () => {
-            const message = input.value.trim();
-            if (message) {
-                this.sendMessage(message);
-                input.value = '';
-            }
-        };
-
-        input.onkeypress = (e) => {
-            if (e.key === 'Enter') {
-                button.click();
-            }
-        };
-    }
+    input.onkeypress = (e) => {
+      if (e.key === "Enter") {
+        button.click();
+      }
+    };
+  }
 }
 
 // Initialize chat client when page loads
 window.onload = () => {
-    new ChatClient();
+  new ChatClient();
 };
 ```
 
 ### Phase 3: Integration & Enhancement
 
 #### 1. Complete WebSocket Handler
+
 - Integrate with LangGraph agent
 - Handle session state management
 - Implement error handling
 
 #### 2. Add Features
+
 - Typing indicators
 - Message history persistence
 - Order summary display
 - Reset conversation button
 
 #### 3. Deployment Script
+
 ```bash
 #!/bin/bash
 # run_chatbot.sh
@@ -502,6 +517,7 @@ uvicorn src.web.app:app --reload --host 0.0.0.0 --port 8000
 ### 1. Independent Testing of Web Interface
 
 #### Test with Mock Agent
+
 ```bash
 # Run web interface with mock agent (no LangGraph dependencies)
 AGENT_TYPE=mock python -m uvicorn src.web.app:app --reload
@@ -512,19 +528,20 @@ pytest tests/web/test_mock_agent.py
 ```
 
 #### Unit Tests for Web Components
+
 ```python
 # tests/web/test_mock_agent.py
 import pytest
 from src.web.agents.mock_agent import MockAgent
 
 @pytest.mark.asyncio
-async def test_mock_agent_conversation():
+async def test_mock_agent_messages():
     agent = MockAgent()
-    
+
     # Test first message
     response1 = await agent.process_message("Hi", "session1")
     assert "Welcome" in response1
-    
+
     # Test follow-up
     response2 = await agent.process_message("Large pizza", "session1")
     assert "size" in response2.lower()
@@ -563,7 +580,7 @@ async def stress_test():
     for i in range(50):
         task = simulate_user(f"user_{i}")
         tasks.append(task)
-    
+
     await asyncio.gather(*tasks)
 
 async def simulate_user(user_id):
@@ -598,12 +615,12 @@ class WeatherAgent(ChatAgent):
     async def process_message(self, message: str, session_id: str) -> str:
         # Parse location from message
         location = self.extract_location(message)
-        
+
         # Call weather API
         weather = await self.get_weather(location)
-        
+
         return f"The weather in {location} is {weather}"
-    
+
     # ... implement other required methods
 ```
 
@@ -677,6 +694,7 @@ google-generativeai==0.3.0
 ## Security Considerations
 
 1. **Input Validation**
+
    - Sanitize user inputs
    - Limit message length
    - Rate limiting
@@ -689,11 +707,13 @@ google-generativeai==0.3.0
 ## Deployment Instructions
 
 1. Install dependencies:
+
    ```bash
    pip install fastapi uvicorn websockets
    ```
 
 2. Run the server:
+
    ```bash
    chmod +x run_chatbot.sh
    ./run_chatbot.sh
@@ -707,11 +727,13 @@ google-generativeai==0.3.0
 ## Future Enhancements
 
 1. **UI Improvements**
+
    - Add order progress visualization
    - Show pizza images
    - Add voice input support
 
 2. **Backend Features**
+
    - Save order history
    - User authentication
    - Multi-language support
@@ -726,22 +748,26 @@ google-generativeai==0.3.0
 This plan provides a complete roadmap for creating a web-based chat interface with the following key benefits:
 
 ### Independent Testing & Development
+
 - **Mock Agent**: Develop and test the web interface without any LangGraph dependencies
 - **Unit Testing**: Test web components in isolation
 - **Load Testing**: Verify performance without the complexity of the real agent
 
 ### High Portability
+
 - **Agent Abstraction**: Clean separation between web layer and agent implementation
 - **Runtime Configuration**: Switch agents via environment variables
 - **Docker Support**: Separate containers for web-only and full deployments
 - **Minimal Dependencies**: Web interface can run with just FastAPI and WebSocket libraries
 
 ### Easy Integration
+
 - **Standard Interface**: Any agent implementing the `ChatAgent` interface can be plugged in
 - **No Code Changes**: Switch between agents without modifying the web layer
 - **Multiple Deployment Options**: Run as monolith or separate services
 
 This architecture ensures that:
+
 1. The web interface can be developed and tested independently
 2. The pizza agent remains portable and can be used in other contexts
 3. New agents can be easily integrated without modifying the web layer

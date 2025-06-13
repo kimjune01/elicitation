@@ -2,12 +2,12 @@ from langchain.prompts import PromptTemplate
 
 
 PIZZA_EXTRACTION_PROMPT = PromptTemplate(
-    input_variables=["conversation"],
+    input_variables=["messages"],
     template="""
 You are a pizza order extractor.
-Here is the conversation so far:
-{conversation}
-Extract up to 100 pizzas from the conversation with the caller. Each pizza should be a JSON object compatible with the following PizzaState schema:
+Here is the messages so far:
+{messages}
+Extract up to 100 pizzas from the messages with the caller. Each pizza should be a JSON object compatible with the following PizzaState schema:
 
 PizzaState.pizzas is an array of pizza objects, where each pizza has:
 - crust: one of [\"thin\", \"classic\", \"stuffed\"] (if not specified, leave this field empty)

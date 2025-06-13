@@ -5,9 +5,14 @@ from src.agent.state import PizzaState, create_initial_state
 
 @pytest.fixture
 def basic_state():
+    from src.agent.state import Pizza
     return PizzaState(
-        pizzas=[{'crust': 'thin', 'toppings': ['cheese'], 'size': 'small'}],
-        conversation=[{'role': 'caller', 'content': 'I want a small thin pizza with cheese.'}],
+        pizzas=[Pizza(crust='thin', toppings=['cheese'], size='small')],
+        messages=[{'role': 'caller', 'content': 'I want a small thin pizza with cheese.'}],
+        rejected=[],
+        ambiguous=[],
+        questions=[],
+        errors=[]
     )
 
 def test_validate_pizzas(basic_state):
@@ -42,13 +47,14 @@ def test_elicitation_response_node(mock_llm, basic_state):
     mock_llm.return_value = 'Please specify the size.'
     state = nodes.elicitation_response_node(basic_state)
     assert isinstance(state, PizzaState)
-    assert state.conversation[-1]['role'] == 'receiver'
+    assert state.messages[-1]['role'] == 'receiver'
 
 def test_order_confirmation_node(basic_state):
     # Make sure there are no incomplete pizzas
+    from src.agent.state import Pizza
     state = PizzaState(
-        pizzas=[{'crust': 'thin', 'toppings': ['cheese'], 'size': 'small'}],
-        conversation=[],
+        pizzas=[Pizza(crust='thin', toppings=['cheese'], size='small')],
+        messages=[],
         questions=[],
         rejected=[],
         ambiguous=[],

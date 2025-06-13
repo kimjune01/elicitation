@@ -1,5 +1,5 @@
 from langgraph.graph import StateGraph, END
-from src.agent.state import PizzaState, Message
+from src.agent.state import PizzaState
 from src.agent.nodes import extract_pizzas_node, gemini_llm, inspect_state_node, elicitation_response_node, order_confirmation_node, compute_pizza_completeness
 from typing import List, Dict, Any
 
@@ -15,10 +15,11 @@ def chat_input_node(inputs: Dict[str, Any]) -> PizzaState:
         return inputs
     # Otherwise, treat as dict input
     messages = inputs.get('messages', [])
-    conversation: List[Message] = [
+    print("CHAT INPUT messages:", messages)
+    messages_list: List[Dict[str, str]] = [
         {"role": msg["role"], "content": msg["content"]} for msg in messages
     ]
-    return PizzaState(conversation=conversation)
+    return PizzaState(messages=messages_list)
 
 graph = StateGraph(state_schema=PizzaState)
 graph.add_node(CHAT_INPUT, chat_input_node)
@@ -52,5 +53,5 @@ graph.set_entry_point(CHAT_INPUT)
 
 compiled_graph = graph.compile(name="Pizza Chat Graph")
 
-result = compiled_graph.invoke({"messages": [{"role": "caller", "content": "I want a pizza with mushrooms."}]})
-print(result)
+# Export the compiled graph as 'graph' for langgraph.json
+graph = compiled_graph

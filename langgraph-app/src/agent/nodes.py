@@ -39,11 +39,11 @@ def gemini_llm(prompt_text, config={}):
 def validate_pizzas(state: PizzaState) -> PizzaState:
     questions = []
     for idx, pizza in enumerate(state.pizzas):
-        if not pizza.get('crust'):
+        if not pizza.crust:
             questions.append(f"What crust for pizza #{idx+1}?")
-        if not pizza.get('toppings'):
+        if not pizza.toppings:
             questions.append(f"What toppings for pizza #{idx+1}?")
-        if not pizza.get('size'):
+        if not pizza.size:
             questions.append(f"What size for pizza #{idx+1}?")
     state.questions = questions
     return state
@@ -51,14 +51,17 @@ def validate_pizzas(state: PizzaState) -> PizzaState:
 def generate_ambiguities(state: PizzaState) -> List[Tuple[int, str]]:
     ambiguities = []
     for idx, pizza in enumerate(state.pizzas):
-        for field in ['crust', 'toppings', 'size']:
-            if pizza.get(field) is None:
-                ambiguities.append((idx, field))
+        if pizza.crust is None:
+            ambiguities.append((idx, 'crust'))
+        if pizza.toppings is None:
+            ambiguities.append((idx, 'toppings'))
+        if pizza.size is None:
+            ambiguities.append((idx, 'size'))
     return ambiguities
 
-def format_conversation(conversation):
+def format_messages(messages):
     """
-    Formats a conversation (list of Message dicts) into a string with each message on a new line.
+    Formats a messages list into a string with each message on a new line.
     Example:
         Input:
             [
@@ -69,15 +72,15 @@ def format_conversation(conversation):
             "caller: I want a pizza with mushrooms.\nreceiver: What size would you like?"
     """
     return "\n".join([
-        f"{msg['role']}: {msg['content']}" for msg in conversation
+        f"{msg['role']}: {msg['content']}" for msg in messages
     ])
 
-def build_pizza_extraction_prompt(conversation: list) -> str:
+def build_pizza_extraction_prompt(messages: list) -> str:
     """
-    Build the pizza extraction prompt from a conversation list.
+    Build the pizza extraction prompt from a messages list.
     """
-    conversation_str = format_conversation(conversation)
-    return PIZZA_EXTRACTION_PROMPT.format(conversation=conversation_str)
+    messages_str = format_messages(messages)
+    return PIZZA_EXTRACTION_PROMPT.format(messages=messages_str)
 
 def parse_llm_pizza_response(response: str) -> tuple:
     """
@@ -112,9 +115,9 @@ def parse_llm_pizza_response(response: str) -> tuple:
 
 def extract_pizzas_node(state: PizzaState, llm) -> PizzaState:
     """
-    Node to extract pizzas from the conversation using the provided LLM.
+    Node to extract pizzas from the messages using the provided LLM.
     """
-    prompt = build_pizza_extraction_prompt(state.conversation)
+    prompt = build_pizza_extraction_prompt(state.messages)
     errors = []
     try:
         response = gemini_llm(prompt, config={
@@ -128,13 +131,13 @@ def extract_pizzas_node(state: PizzaState, llm) -> PizzaState:
         pizzas, rejected, ambiguous = [], [], []
         errors.append(f"LLM call failed: {str(e)}")
     new_state = create_initial_state(pizzas, rejected=rejected, ambiguous=ambiguous, errors=errors)
-    new_state.conversation = state.conversation
+    new_state.messages = state.messages
     return new_state
 
 def inspect_state_node(state):
     print("INSPECT STATE:", state)
     # If there are errors, print any raw LLM output for debugging
-    if hasattr(state, 'errors') and state.errors:
+    if state.errors:
         for error in state.errors:
             if error.startswith("Raw response:"):
                 print("RAW LLM OUTPUT:", error[len("Raw response:"):].strip())
@@ -150,9 +153,12 @@ def compute_pizza_completeness(state: PizzaState):
     incomplete_pizzas = []
     for idx, pizza in enumerate(state.pizzas):
         missing_fields = []
-        for field in ['crust', 'toppings', 'size']:
-            if not pizza.get(field):
-                missing_fields.append(field)
+        if not pizza.crust:
+            missing_fields.append('crust')
+        if not pizza.toppings:
+            missing_fields.append('toppings')
+        if not pizza.size:
+            missing_fields.append('size')
         ambiguous_fields = [amb[1] for amb in state.ambiguous if amb[0] == idx]
         if not missing_fields and not ambiguous_fields:
             complete_pizzas.append((idx, pizza))
@@ -160,7 +166,7 @@ def compute_pizza_completeness(state: PizzaState):
             incomplete_pizzas.append({
                 'index': ordinal(idx+1),
                 'pizza': pizza,
-                'accepted_fields': [field for field in ['crust', 'toppings', 'size'] if pizza.get(field)],
+                'accepted_fields': [field for field in ['crust', 'toppings', 'size'] if getattr(pizza, field)],
                 'missing_fields': missing_fields,
                 'ambiguous_fields': ambiguous_fields
             })
@@ -204,7 +210,7 @@ def elicitation_response_node(state: PizzaState) -> PizzaState:
     )
     response = gemini_llm(prompt)
     print("ELICITATION RESPONSE:", response)
-    state.conversation.append({"role": "receiver", "content": response})
+    state.messages.append({"role": "receiver", "content": response})
     return state
 
 def order_confirmation_node(state: PizzaState) -> PizzaState:
@@ -217,7 +223,7 @@ def order_confirmation_node(state: PizzaState) -> PizzaState:
     pizza_descriptions = []
     for idx, pizza in complete_pizzas:
         pizza_num = ordinal(idx+1)
-        desc = f"Your {pizza_num} pizza: {pizza.get('size', '?')} {pizza.get('crust', '?')} crust with {', '.join(pizza.get('toppings', []))}"
+        desc = f"Your {pizza_num} pizza: {pizza.size or '?'} {pizza.crust or '?'} crust with {', '.join(pizza.toppings or [])}"
         pizza_descriptions.append(desc)
     pizzas_str = '\n'.join(pizza_descriptions)
     confirmation_message = f"Your pizza order is complete and has been confirmed!\n\nOrder summary:\n{pizzas_str}\n\nThank you."
