@@ -2,13 +2,14 @@ import pytest
 from unittest.mock import patch, MagicMock
 from src.agent import nodes
 from src.agent.state import PizzaState, create_initial_state
+from langchain_core.messages import HumanMessage, AIMessage
 
 @pytest.fixture
 def basic_state():
     from src.agent.state import Pizza
     return PizzaState(
         pizzas=[Pizza(crust='thin', toppings=['cheese'], size='small')],
-        messages=[{'role': 'caller', 'content': 'I want a small thin pizza with cheese.'}],
+        messages=[HumanMessage(content='I want a small thin pizza with cheese.')],
         rejected=[],
         ambiguous=[],
         questions=[],
@@ -47,7 +48,7 @@ def test_elicitation_response_node(mock_llm, basic_state):
     mock_llm.return_value = 'Please specify the size.'
     state = nodes.elicitation_response_node(basic_state)
     assert isinstance(state, PizzaState)
-    assert state.messages[-1]['role'] == 'receiver'
+    assert isinstance(state.messages[-1], AIMessage)
 
 def test_order_confirmation_node(basic_state):
     # Make sure there are no incomplete pizzas

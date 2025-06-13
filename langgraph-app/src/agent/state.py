@@ -1,5 +1,7 @@
-from typing import Optional, List, Literal, Tuple, Dict
+from typing import Optional, List, Literal, Tuple, Dict, Annotated
 from pydantic import BaseModel, Field
+from langgraph.graph.message import add_messages
+from langchain_core.messages import BaseMessage
 
 PizzaCrust = Literal['thin', 'classic', 'stuffed']
 PizzaSize = Literal['small', 'medium', 'large', 'extra_large']
@@ -19,7 +21,7 @@ class Pizza(BaseModel):
 
 class PizzaState(BaseModel):
     pizzas: List[Pizza] = Field(default_factory=list)
-    messages: List[Dict[str, str]] = Field(default_factory=list)
+    messages: Annotated[List[BaseMessage], add_messages] = Field(default_factory=list)
     rejected: List[str] = Field(default_factory=list)
     ambiguous: List[Tuple[int, str]] = Field(default_factory=list)
     questions: List[str] = Field(default_factory=list)

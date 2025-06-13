@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from src.agent.prompts import PIZZA_EXTRACTION_PROMPT, ORDER_SUMMARY_PROMPT
 from src.agent.state import Pizza, PizzaState, create_initial_state
 from typing import List, Tuple, TypedDict
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 import json
 
 # Define Pydantic models for structured output
@@ -64,16 +65,27 @@ def format_messages(messages):
     Formats a messages list into a string with each message on a new line.
     Example:
         Input:
-            [
-                {"role": "caller", "content": "I want a pizza with mushrooms."},
-                {"role": "receiver", "content": "What size would you like?"}
-            ]
+            [HumanMessage(content="I want a pizza with mushrooms."),
+             AIMessage(content="What size would you like?")]
         Output:
-            "caller: I want a pizza with mushrooms.\nreceiver: What size would you like?"
+            "human: I want a pizza with mushrooms.\nai: What size would you like?"
     """
-    return "\n".join([
-        f"{msg['role']}: {msg['content']}" for msg in messages
-    ])
+    formatted = []
+    for msg in messages:
+        if isinstance(msg, HumanMessage):
+            formatted.append(f"human: {msg.content}")
+        elif isinstance(msg, AIMessage):
+            formatted.append(f"ai: {msg.content}")
+        elif isinstance(msg, dict):
+            # Handle legacy dict format for backwards compatibility
+            role = msg.get('role', 'unknown')
+            content = msg.get('content', '')
+            formatted.append(f"{role}: {content}")
+        else:
+            # Generic BaseMessage handling
+            role = msg.__class__.__name__.lower().replace('message', '')
+            formatted.append(f"{role}: {msg.content}")
+    return "\n".join(formatted)
 
 def build_pizza_extraction_prompt(messages: list) -> str:
     """
@@ -210,7 +222,7 @@ def elicitation_response_node(state: PizzaState) -> PizzaState:
     )
     response = gemini_llm(prompt)
     print("ELICITATION RESPONSE:", response)
-    state.messages.append({"role": "receiver", "content": response})
+    state.messages.append(AIMessage(content=response))
     return state
 
 def order_confirmation_node(state: PizzaState) -> PizzaState:

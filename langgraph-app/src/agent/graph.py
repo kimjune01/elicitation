@@ -2,6 +2,7 @@ from langgraph.graph import StateGraph, END
 from src.agent.state import PizzaState
 from src.agent.nodes import extract_pizzas_node, gemini_llm, inspect_state_node, elicitation_response_node, order_confirmation_node, compute_pizza_completeness
 from typing import List, Dict, Any
+from langchain_core.messages import HumanMessage, AIMessage
 
 GENERATE_PIZZAS = "extract_pizzas"
 INSPECT_STATE = "inspect_state"
@@ -16,10 +17,7 @@ def chat_input_node(inputs: Dict[str, Any]) -> PizzaState:
     # Otherwise, treat as dict input
     messages = inputs.get('messages', [])
     print("CHAT INPUT messages:", messages)
-    messages_list: List[Dict[str, str]] = [
-        {"role": msg["role"], "content": msg["content"]} for msg in messages
-    ]
-    return PizzaState(messages=messages_list)
+    return PizzaState(messages=messages)
 
 graph = StateGraph(state_schema=PizzaState)
 graph.add_node(CHAT_INPUT, chat_input_node)
